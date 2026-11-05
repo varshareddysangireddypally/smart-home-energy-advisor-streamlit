@@ -27,7 +27,7 @@ class GraniteClient:
     """
 
     DEFAULT_PARAMS = {
-        "max_new_tokens": 400,
+        "max_new_tokens": 800,
         "min_new_tokens": 20,
         "temperature": 0.3,
         "top_p": 0.9,
@@ -97,19 +97,23 @@ class GraniteClient:
             return self._demo_response(prompt)
 
         try:
-            params_override = {}
-            if max_tokens:
-                from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
-                params_override = {GenParams.MAX_NEW_TOKENS: max_tokens}
-
             from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
-            stop_params = {GenParams.STOP_SEQUENCES: self.STOP_SEQUENCES}
-            merged = {**stop_params, **(params_override or {})}
-            response = self._model.generate_text(prompt=prompt, params=merged)
+
+            generation_params = {
+                GenParams.MAX_NEW_TOKENS: max_tokens or self.DEFAULT_PARAMS["max_new_tokens"],
+                GenParams.STOP_SEQUENCES: self.STOP_SEQUENCES,
+            }
+
+            response = self._model.generate_text(
+                prompt=prompt,
+                params=generation_params
+            )
+
             text = response.strip() if isinstance(response, str) else str(response)
-            # Strip any leaked turn tokens just in case
+
             for tok in self.STOP_SEQUENCES:
                 text = text.split(tok)[0].strip()
+
             return text
 
         except Exception as exc:
