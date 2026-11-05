@@ -22,12 +22,6 @@ from data.smart_meter import (
 class EnergyAnalyzer:
     """
     Deterministic analysis functions for simulated smart-meter data.
-
-    Important:
-    - Meter history represents simulated meter readings.
-    - Appliance consumption represents separate daily estimates.
-    - Appliance estimates must not be treated as measured meter data.
-    - Savings are estimates, not guaranteed results.
     """
 
     def __init__(self, snapshot: SmartMeterSnapshot):
@@ -43,7 +37,6 @@ class EnergyAnalyzer:
 
     @staticmethod
     def _is_off_peak_hour(hour: int) -> bool:
-        """Off-peak hours are 10 PM to 6 AM."""
         return hour >= 22 or hour < 6
 
     def _is_peak_hour(self, hour: int) -> bool:
@@ -54,7 +47,6 @@ class EnergyAnalyzer:
     # ---------------------------------------------------------
 
     def get_current_status(self) -> Dict[str, Any]:
-        """Returns the current simulated household status."""
 
         on_appliances = [
             a for a in self.snap.appliances if a.is_on
@@ -103,7 +95,6 @@ class EnergyAnalyzer:
     # ---------------------------------------------------------
 
     def analyze_monthly_bill(self) -> Dict[str, Any]:
-        """Analyzes simulated meter consumption and electricity cost."""
 
         history = self.snap.daily_history
 
@@ -112,7 +103,6 @@ class EnergyAnalyzer:
         for day in history:
             all_hourly.extend(day.hourly)
 
-        # Total peak consumption
         peak_readings = [
             r for r in all_hourly if r.is_peak
         ]
@@ -120,7 +110,6 @@ class EnergyAnalyzer:
         peak_kwh = sum(r.kwh for r in peak_readings)
         peak_cost = sum(r.cost for r in peak_readings)
 
-        # True off-peak consumption: 10 PM to 6 AM
         off_peak_readings = [
             r for r in all_hourly
             if self._is_off_peak_hour(r.timestamp.hour)
@@ -130,24 +119,20 @@ class EnergyAnalyzer:
             r.kwh for r in off_peak_readings
         )
 
-        # Total meter consumption and cost
         total_kwh = sum(r.kwh for r in all_hourly)
         total_cost = sum(r.cost for r in all_hourly)
 
-        # Peak cost share, not peak usage share
         peak_cost_share_pct = (
             round(peak_cost / total_cost * 100, 1)
             if total_cost > 0 else 0
         )
 
-        # Peak usage share is calculated separately
         peak_usage_share_pct = (
             round(peak_kwh / total_kwh * 100, 1)
             if total_kwh > 0 else 0
         )
 
-        # Appliance category percentages.
-        # These are based on appliance estimates, NOT meter readings.
+        # Appliance category percentages use all appliance estimates.
         cat_daily: Dict[str, float] = {}
 
         for appliance in self.snap.appliances:
@@ -165,7 +150,6 @@ class EnergyAnalyzer:
             for category, kwh in cat_daily.items()
         } if total_appliance_daily > 0 else {}
 
-        # Daily average and standard deviation
         daily_totals = [
             day.total_kwh for day in history
         ]
@@ -179,8 +163,8 @@ class EnergyAnalyzer:
             if len(daily_totals) > 1 else 0
         )
 
-        # Compare recent 7 days with previous 7 days
         if len(history) >= 14:
+
             recent_7 = mean([
                 d.total_kwh for d in history[-7:]
             ])
@@ -196,6 +180,7 @@ class EnergyAnalyzer:
                 )
                 if prev_7 > 0 else 0
             )
+
         else:
             trend_pct = 0.0
 
@@ -265,19 +250,29 @@ class EnergyAnalyzer:
 
     def audit_appliances(self) -> Dict[str, Any]:
         """
-        Estimates appliance-level monthly consumption and cost.
-
-        These are estimates based on configured daily_kwh values.
-        They are not measured individual appliance readings.
+        Estimates appliance consumption, cost, and percentage
+        contribution using all appliance estimates.
         """
 
         days = len(self.snap.daily_history) or 30
+
+        # Total daily consumption across ALL appliances.
+        total_daily_kwh = sum(
+            appliance.daily_kwh
+            for appliance in self.snap.appliances
+        )
 
         appliance_costs = []
 
         for appliance in self.snap.appliances:
 
-            monthly_kwh = appliance.daily_kwh * days
+            daily_kwh = appliance.daily_kwh
+            monthly_kwh = daily_kwh * days
+
+            contribution_pct = (
+                round(daily_kwh / total_daily_kwh * 100, 1)
+                if total_daily_kwh > 0 else 0
+            )
 
             monthly_cost = round(
                 monthly_kwh * self.rate, 2
@@ -287,16 +282,15 @@ class EnergyAnalyzer:
                 "name": appliance.name,
                 "category": appliance.category,
 
-                "daily_kwh": appliance.daily_kwh,
+                "daily_kwh": round(daily_kwh, 2),
                 "monthly_kwh": round(monthly_kwh, 2),
 
-                "monthly_cost": monthly_cost,
+                "contribution_pct": contribution_pct,
 
+                "monthly_cost": monthly_cost,
                 "currency": self.currency,
 
-                "smart_controllable": (
-                    appliance.smart_controllable
-                ),
+                "smart_controllable": appliance.smart_controllable,
 
                 "optimizable": (
                     appliance.smart_controllable
@@ -304,35 +298,39 @@ class EnergyAnalyzer:
                 ),
 
                 "estimate_basis": (
-                    "Configured daily appliance consumption "
-                    "multiplied by the flat sample energy rate."
+                    "Configured daily appliance consumption. "
+                    "Percentage is calculated against the total "
+                    "daily estimates of all appliances."
                 ),
             })
 
+        # Rank by daily energy consumption.
         appliance_costs.sort(
-            key=lambda x: x["monthly_cost"],
+            key=lambda x: x["daily_kwh"],
             reverse=True
         )
 
         total_monthly = round(
-            sum(
-                a["monthly_cost"]
-                for a in appliance_costs
-            ),
+            sum(a["monthly_cost"] for a in appliance_costs),
             2
         )
 
-        # Do not invent a fixed percentage of savings.
-        # No verified reduction rate is available.
         return {
             "tool": "appliance_audit",
+
+            "total_daily_appliance_estimate_kwh": round(
+                total_daily_kwh, 2
+            ),
+
+            "total_monthly_appliance_estimate_kwh": round(
+                total_daily_kwh * days, 2
+            ),
 
             "appliances": appliance_costs,
 
             "total_monthly_cost": total_monthly,
 
             "potential_monthly_saving": 0.0,
-
             "potential_monthly_saving_available": False,
 
             "saving_estimate_note": (
@@ -348,9 +346,9 @@ class EnergyAnalyzer:
             "currency": self.currency,
 
             "data_note": (
-                "Appliance costs are estimates based on "
-                "configured appliance consumption. They are "
-                "not the actual smart-meter bill."
+                "Appliance costs and consumption are estimates "
+                "based on configured daily appliance values. "
+                "They are not the actual smart-meter bill."
             ),
         }
 
@@ -359,12 +357,6 @@ class EnergyAnalyzer:
     # ---------------------------------------------------------
 
     def get_optimal_schedule(self) -> Dict[str, Any]:
-        """
-        Calculates theoretical savings if eligible appliance
-        consumption can be shifted from peak to off-peak hours.
-
-        This is a scenario estimate, not guaranteed savings.
-        """
 
         rate = float(
             os.getenv("ENERGY_RATE_PER_KWH", "0.12")
@@ -470,7 +462,6 @@ class EnergyAnalyzer:
     # ---------------------------------------------------------
 
     def detect_patterns(self) -> Dict[str, Any]:
-        """Detects trends and unusual daily consumption."""
 
         history = self.snap.daily_history
 
@@ -492,7 +483,6 @@ class EnergyAnalyzer:
             if len(daily_kwh) > 1 else 0
         )
 
-        # Weekday and weekend averages
         weekday_kwh = [
             day.total_kwh
             for day in history
@@ -513,7 +503,6 @@ class EnergyAnalyzer:
             mean(weekend_kwh) if weekend_kwh else 0
         )
 
-        # Average consumption for each hour
         hourly_avgs: Dict[int, List[float]] = {
             hour: [] for hour in range(24)
         }
@@ -535,7 +524,6 @@ class EnergyAnalyzer:
             if hourly_profile else None
         )
 
-        # Identify unusual daily consumption
         anomalies = []
 
         for day in history:
@@ -601,9 +589,7 @@ class EnergyAnalyzer:
 
     def estimate_carbon(self) -> Dict[str, Any]:
         """
-        Estimates emissions using the configured US grid factor.
-
-        This factor is not a verified local grid factor for India.
+        Estimates emissions using an illustrative US grid factor.
         """
 
         emission_factor = 0.386
