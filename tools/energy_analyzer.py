@@ -1,9 +1,9 @@
+
 """
 tools/energy_analyzer.py
-─────────────────────────
-Analytical tools the agent uses to inspect smart meter data.
-Each tool returns a structured dict that the agent can include
-in the Granite prompt as context.
+
+Deterministic analysis tools for the Smart Home Energy Advisor.
+Returns structured data for the IBM Granite advisor.
 """
 
 from __future__ import annotations
@@ -12,14 +12,22 @@ import os
 from statistics import mean, stdev
 from typing import Dict, List, Any
 
-from data.smart_meter import SmartMeterSnapshot, DailyUsageSummary, HourlyReading
+from data.smart_meter import (
+    SmartMeterSnapshot,
+    DailyUsageSummary,
+    HourlyReading,
+)
 
 
 class EnergyAnalyzer:
     """
-    A collection of deterministic analysis functions.
-    The agent calls these tools to gather facts before asking
-    Granite to reason over them.
+    Deterministic analysis functions for simulated smart-meter data.
+
+    Important:
+    - Meter history represents simulated meter readings.
+    - Appliance consumption represents separate daily estimates.
+    - Appliance estimates must not be treated as measured meter data.
+    - Savings are estimates, not guaranteed results.
     """
 
     def __init__(self, snapshot: SmartMeterSnapshot):
@@ -29,243 +37,608 @@ class EnergyAnalyzer:
         self.peak_end = int(os.getenv("PEAK_HOURS_END", "21"))
         self.currency = os.getenv("ENERGY_CURRENCY", "USD")
 
-    # ── Tool 1: Current Status ────────────────────────────────
+    # ---------------------------------------------------------
+    # Helper functions
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def _is_off_peak_hour(hour: int) -> bool:
+        """Off-peak hours are 10 PM to 6 AM."""
+        return hour >= 22 or hour < 6
+
+    def _is_peak_hour(self, hour: int) -> bool:
+        return self.peak_start <= hour < self.peak_end
+
+    # ---------------------------------------------------------
+    # Tool 1: Current Status
+    # ---------------------------------------------------------
 
     def get_current_status(self) -> Dict[str, Any]:
-        """Returns a snapshot of what the home is doing RIGHT NOW."""
-        on_appliances = [a for a in self.snap.appliances if a.is_on]
-        top_consumers = sorted(on_appliances, key=lambda a: a.watts, reverse=True)[:5]
+        """Returns the current simulated household status."""
+
+        on_appliances = [
+            a for a in self.snap.appliances if a.is_on
+        ]
+
+        top_consumers = sorted(
+            on_appliances,
+            key=lambda a: a.watts,
+            reverse=True
+        )[:5]
+
         return {
             "tool": "current_status",
             "meter_id": self.snap.meter_id,
-            "timestamp": self.snap.timestamp.strftime("%Y-%m-%d %H:%M"),
+            "timestamp": self.snap.timestamp.strftime(
+                "%Y-%m-%d %H:%M"
+            ),
             "current_draw_watts": self.snap.current_draw_watts,
-            "current_draw_kw": round(self.snap.current_draw_watts / 1000, 2),
+            "current_draw_kw": round(
+                self.snap.current_draw_watts / 1000, 2
+            ),
             "today_kwh": self.snap.today_kwh,
-            "today_estimated_cost": round(self.snap.today_kwh * self.rate, 2),
-            "is_peak_hour": self.peak_start <= self.snap.timestamp.hour < self.peak_end,
+            "today_estimated_cost": round(
+                self.snap.today_kwh * self.rate, 2
+            ),
+            "currency": self.currency,
+            "is_peak_hour": self._is_peak_hour(
+                self.snap.timestamp.hour
+            ),
             "active_appliances": len(on_appliances),
             "top_consumers": [
-                {"name": a.name, "watts": a.watts, "category": a.category}
+                {
+                    "name": a.name,
+                    "watts": a.watts,
+                    "category": a.category,
+                }
                 for a in top_consumers
             ],
+            "data_note": (
+                "Current status and daily cost are simulated estimates."
+            ),
         }
 
-    # ── Tool 2: Monthly Bill Analysis ─────────────────────────
+    # ---------------------------------------------------------
+    # Tool 2: Monthly Bill Analysis
+    # ---------------------------------------------------------
 
     def analyze_monthly_bill(self) -> Dict[str, Any]:
-        """Breaks down the current month's energy spend by category and time-of-use."""
+        """Analyzes simulated meter consumption and electricity cost."""
+
         history = self.snap.daily_history
 
-        # Aggregate all hourly readings
         all_hourly: List[HourlyReading] = []
+
         for day in history:
             all_hourly.extend(day.hourly)
 
-        peak_kwh    = sum(r.kwh for r in all_hourly if r.is_peak)
-        off_peak_kwh = sum(r.kwh for r in all_hourly if not r.is_peak)
-        total_kwh   = sum(r.kwh for r in all_hourly)
-        total_cost  = sum(r.cost for r in all_hourly)
+        # Total peak consumption
+        peak_readings = [
+            r for r in all_hourly if r.is_peak
+        ]
 
-        # Category split from appliance data
+        peak_kwh = sum(r.kwh for r in peak_readings)
+        peak_cost = sum(r.cost for r in peak_readings)
+
+        # True off-peak consumption: 10 PM to 6 AM
+        off_peak_readings = [
+            r for r in all_hourly
+            if self._is_off_peak_hour(r.timestamp.hour)
+        ]
+
+        off_peak_kwh = sum(
+            r.kwh for r in off_peak_readings
+        )
+
+        # Total meter consumption and cost
+        total_kwh = sum(r.kwh for r in all_hourly)
+        total_cost = sum(r.cost for r in all_hourly)
+
+        # Peak cost share, not peak usage share
+        peak_cost_share_pct = (
+            round(peak_cost / total_cost * 100, 1)
+            if total_cost > 0 else 0
+        )
+
+        # Peak usage share is calculated separately
+        peak_usage_share_pct = (
+            round(peak_kwh / total_kwh * 100, 1)
+            if total_kwh > 0 else 0
+        )
+
+        # Appliance category percentages.
+        # These are based on appliance estimates, NOT meter readings.
         cat_daily: Dict[str, float] = {}
-        for a in self.snap.appliances:
-            cat_daily[a.category] = cat_daily.get(a.category, 0) + a.daily_kwh
-        total_daily = sum(cat_daily.values()) or 1
+
+        for appliance in self.snap.appliances:
+            cat_daily[appliance.category] = (
+                cat_daily.get(appliance.category, 0)
+                + appliance.daily_kwh
+            )
+
+        total_appliance_daily = sum(cat_daily.values())
+
         category_pct = {
-            cat: round((kwh / total_daily) * 100, 1)
-            for cat, kwh in cat_daily.items()
-        }
+            category: round(
+                kwh / total_appliance_daily * 100, 1
+            )
+            for category, kwh in cat_daily.items()
+        } if total_appliance_daily > 0 else {}
 
-        # Daily average and trend
-        daily_totals = [d.total_kwh for d in history]
-        avg_daily = mean(daily_totals) if daily_totals else 0
-        std_daily = stdev(daily_totals) if len(daily_totals) > 1 else 0
+        # Daily average and standard deviation
+        daily_totals = [
+            day.total_kwh for day in history
+        ]
 
-        # Compare last 7 days vs previous 7 days
+        avg_daily = (
+            mean(daily_totals) if daily_totals else 0
+        )
+
+        std_daily = (
+            stdev(daily_totals)
+            if len(daily_totals) > 1 else 0
+        )
+
+        # Compare recent 7 days with previous 7 days
         if len(history) >= 14:
-            recent_7  = mean([d.total_kwh for d in history[-7:]])
-            prev_7    = mean([d.total_kwh for d in history[-14:-7]])
-            trend_pct = round(((recent_7 - prev_7) / prev_7) * 100, 1) if prev_7 else 0
+            recent_7 = mean([
+                d.total_kwh for d in history[-7:]
+            ])
+
+            prev_7 = mean([
+                d.total_kwh for d in history[-14:-7]
+            ])
+
+            trend_pct = (
+                round(
+                    ((recent_7 - prev_7) / prev_7) * 100,
+                    1
+                )
+                if prev_7 > 0 else 0
+            )
         else:
             trend_pct = 0.0
 
         return {
             "tool": "monthly_bill_analysis",
             "period_days": len(history),
+
             "total_kwh": round(total_kwh, 2),
             "total_cost": round(total_cost, 2),
             "currency": self.currency,
+
             "peak_kwh": round(peak_kwh, 2),
             "off_peak_kwh": round(off_peak_kwh, 2),
-            "peak_cost_share_pct": round((peak_kwh / total_kwh * 100), 1) if total_kwh else 0,
+
+            "peak_cost": round(peak_cost, 2),
+            "peak_cost_share_pct": peak_cost_share_pct,
+            "peak_usage_share_pct": peak_usage_share_pct,
+
             "avg_daily_kwh": round(avg_daily, 2),
             "daily_std_kwh": round(std_daily, 2),
+
             "category_breakdown_pct": category_pct,
+            "category_breakdown_basis": (
+                "Estimated appliance daily consumption. "
+                "Not a breakdown of measured meter consumption."
+            ),
+
             "trend_7day_pct": trend_pct,
-            "high_bill_flags": self._flag_high_bill(history, avg_daily, std_daily),
+
+            "high_bill_flags": self._flag_high_bill(
+                history, avg_daily, std_daily
+            ),
+
+            "data_note": (
+                "Monthly usage and cost are calculated from "
+                "simulated hourly meter readings."
+            ),
         }
 
     def _flag_high_bill_days(
-        self, history: List[DailyUsageSummary], avg: float, std: float
+        self,
+        history: List[DailyUsageSummary],
+        avg: float,
+        std: float,
     ) -> List[str]:
+
         return [
-            d.date for d in history
-            if d.total_kwh > avg + std
+            day.date
+            for day in history
+            if day.total_kwh > avg + std
         ]
 
     def _flag_high_bill(
-        self, history: List[DailyUsageSummary], avg: float, std: float
+        self,
+        history: List[DailyUsageSummary],
+        avg: float,
+        std: float,
     ) -> List[str]:
-        return self._flag_high_bill_days(history, avg, std)
 
-    # ── Tool 3: Appliance-Level Audit ─────────────────────────
+        return self._flag_high_bill_days(
+            history, avg, std
+        )
+
+    # ---------------------------------------------------------
+    # Tool 3: Appliance-Level Audit
+    # ---------------------------------------------------------
 
     def audit_appliances(self) -> Dict[str, Any]:
-        """Ranks appliances by estimated monthly cost and identifies optimisation targets."""
+        """
+        Estimates appliance-level monthly consumption and cost.
+
+        These are estimates based on configured daily_kwh values.
+        They are not measured individual appliance readings.
+        """
+
         days = len(self.snap.daily_history) or 30
+
         appliance_costs = []
-        for a in self.snap.appliances:
-            monthly_kwh  = a.daily_kwh * days
-            monthly_cost = round(monthly_kwh * self.rate, 2)
+
+        for appliance in self.snap.appliances:
+
+            monthly_kwh = appliance.daily_kwh * days
+
+            monthly_cost = round(
+                monthly_kwh * self.rate, 2
+            )
+
             appliance_costs.append({
-                "name": a.name,
-                "category": a.category,
-                "daily_kwh": a.daily_kwh,
-                "monthly_kwh": round(monthly_kwh, 1),
+                "name": appliance.name,
+                "category": appliance.category,
+
+                "daily_kwh": appliance.daily_kwh,
+                "monthly_kwh": round(monthly_kwh, 2),
+
                 "monthly_cost": monthly_cost,
-                "smart_controllable": a.smart_controllable,
-                "optimizable": a.smart_controllable and monthly_cost > 5.0,
+
+                "currency": self.currency,
+
+                "smart_controllable": (
+                    appliance.smart_controllable
+                ),
+
+                "optimizable": (
+                    appliance.smart_controllable
+                    and monthly_cost > 5.0
+                ),
+
+                "estimate_basis": (
+                    "Configured daily appliance consumption "
+                    "multiplied by the flat sample energy rate."
+                ),
             })
-        appliance_costs.sort(key=lambda x: x["monthly_cost"], reverse=True)
-        total_monthly = sum(a["monthly_cost"] for a in appliance_costs)
-        potential_saving = sum(
-            a["monthly_cost"] * 0.30
-            for a in appliance_costs
-            if a["optimizable"]
+
+        appliance_costs.sort(
+            key=lambda x: x["monthly_cost"],
+            reverse=True
         )
+
+        total_monthly = round(
+            sum(
+                a["monthly_cost"]
+                for a in appliance_costs
+            ),
+            2
+        )
+
+        # Do not invent a fixed percentage of savings.
+        # No verified reduction rate is available.
         return {
             "tool": "appliance_audit",
+
             "appliances": appliance_costs,
-            "total_monthly_cost": round(total_monthly, 2),
-            "potential_monthly_saving": round(potential_saving, 2),
-            "top_3_consumers": [a["name"] for a in appliance_costs[:3]],
+
+            "total_monthly_cost": total_monthly,
+
+            "potential_monthly_saving": 0.0,
+
+            "potential_monthly_saving_available": False,
+
+            "saving_estimate_note": (
+                "A reliable appliance savings amount cannot "
+                "be calculated from the available data. "
+                "No arbitrary savings percentage is assumed."
+            ),
+
+            "top_3_consumers": [
+                a["name"] for a in appliance_costs[:3]
+            ],
+
+            "currency": self.currency,
+
+            "data_note": (
+                "Appliance costs are estimates based on "
+                "configured appliance consumption. They are "
+                "not the actual smart-meter bill."
+            ),
         }
 
-    # ── Tool 4: Time-of-Use Optimisation ──────────────────────
+    # ---------------------------------------------------------
+    # Tool 4: Time-of-Use Optimisation
+    # ---------------------------------------------------------
 
     def get_optimal_schedule(self) -> Dict[str, Any]:
         """
-        Returns the best time windows to run shiftable loads,
-        based on the time-of-use tariff structure.
+        Calculates theoretical savings if eligible appliance
+        consumption can be shifted from peak to off-peak hours.
+
+        This is a scenario estimate, not guaranteed savings.
         """
-        rate = float(os.getenv("ENERGY_RATE_PER_KWH", "0.12"))
-        peak_mult    = float(os.getenv("PEAK_RATE_MULTIPLIER", "1.5"))
-        offpeak_mult = float(os.getenv("OFF_PEAK_RATE_MULTIPLIER", "0.7"))
+
+        rate = float(
+            os.getenv("ENERGY_RATE_PER_KWH", "0.12")
+        )
+
+        peak_mult = float(
+            os.getenv("PEAK_RATE_MULTIPLIER", "1.5")
+        )
+
+        offpeak_mult = float(
+            os.getenv("OFF_PEAK_RATE_MULTIPLIER", "0.7")
+        )
 
         shiftable = [
             a for a in self.snap.appliances
             if a.smart_controllable and a.daily_kwh > 0.3
         ]
+
         schedule = []
-        for a in shiftable:
-            peak_cost    = round(a.daily_kwh * rate * peak_mult, 3)
-            offpeak_cost = round(a.daily_kwh * rate * offpeak_mult, 3)
-            saving       = round(peak_cost - offpeak_cost, 3)
+
+        for appliance in shiftable:
+
+            peak_cost = (
+                appliance.daily_kwh * rate * peak_mult
+            )
+
+            offpeak_cost = (
+                appliance.daily_kwh * rate * offpeak_mult
+            )
+
+            daily_saving = peak_cost - offpeak_cost
+
             schedule.append({
-                "appliance": a.name,
-                "category": a.category,
-                "daily_kwh": a.daily_kwh,
-                "cost_if_peak": peak_cost,
-                "cost_if_offpeak": offpeak_cost,
-                "daily_saving": saving,
-                "monthly_saving": round(saving * 30, 2),
-                "recommended_window": "10 PM – 6 AM (off-peak)",
+                "appliance": appliance.name,
+                "category": appliance.category,
+
+                "daily_kwh": appliance.daily_kwh,
+
+                "cost_if_peak": round(peak_cost, 3),
+                "cost_if_offpeak": round(offpeak_cost, 3),
+
+                "daily_saving": round(daily_saving, 3),
+
+                "monthly_saving": round(
+                    daily_saving * 30, 2
+                ),
+
+                "recommended_window": (
+                    "10 PM - 6 AM (off-peak)"
+                ),
+
+                "assumption": (
+                    "Assumes the full configured daily "
+                    "consumption can be shifted from peak "
+                    "to off-peak hours."
+                ),
             })
-        schedule.sort(key=lambda x: x["monthly_saving"], reverse=True)
+
+        schedule.sort(
+            key=lambda x: x["monthly_saving"],
+            reverse=True
+        )
+
+        total_saving = round(
+            sum(
+                item["monthly_saving"]
+                for item in schedule
+            ),
+            2
+        )
+
         return {
             "tool": "optimal_schedule",
-            "off_peak_window": "10:00 PM – 6:00 AM",
-            "off_peak_rate": round(rate * offpeak_mult, 4),
-            "peak_rate": round(rate * peak_mult, 4),
+
+            "off_peak_window": "10:00 PM - 6:00 AM",
+
+            "off_peak_rate": round(
+                rate * offpeak_mult, 4
+            ),
+
+            "peak_rate": round(
+                rate * peak_mult, 4
+            ),
+
+            "currency": self.currency,
+
             "shiftable_appliances": schedule,
-            "total_monthly_saving_potential": round(
-                sum(s["monthly_saving"] for s in schedule), 2
+
+            "total_monthly_saving_potential": total_saving,
+
+            "saving_type": "theoretical_estimate",
+
+            "saving_note": (
+                "Theoretical maximum under the assumption "
+                "that all listed shiftable consumption "
+                "moves from peak to off-peak hours. "
+                "Actual savings may be lower."
             ),
         }
 
-    # ── Tool 5: Usage Pattern Detection ───────────────────────
+    # ---------------------------------------------------------
+    # Tool 5: Usage Pattern Detection
+    # ---------------------------------------------------------
 
     def detect_patterns(self) -> Dict[str, Any]:
-        """Identifies usage anomalies and consumption patterns over the history window."""
+        """Detects trends and unusual daily consumption."""
+
         history = self.snap.daily_history
+
         if not history:
-            return {"tool": "pattern_detection", "patterns": []}
+            return {
+                "tool": "pattern_detection",
+                "patterns": [],
+                "total_anomaly_days": 0,
+            }
 
-        daily_kwh = [d.total_kwh for d in history]
+        daily_kwh = [
+            day.total_kwh for day in history
+        ]
+
         avg = mean(daily_kwh)
-        sd  = stdev(daily_kwh) if len(daily_kwh) > 1 else 0
 
-        # Weekend vs weekday
-        weekday_kwh = [d.total_kwh for d in history
-                       if not self._is_weekend(d.date)]
-        weekend_kwh = [d.total_kwh for d in history
-                       if self._is_weekend(d.date)]
-        wd_avg = mean(weekday_kwh) if weekday_kwh else 0
-        we_avg = mean(weekend_kwh) if weekend_kwh else 0
+        sd = (
+            stdev(daily_kwh)
+            if len(daily_kwh) > 1 else 0
+        )
 
-        # Hourly averages across the month
-        hourly_avgs: Dict[int, List[float]] = {h: [] for h in range(24)}
+        # Weekday and weekend averages
+        weekday_kwh = [
+            day.total_kwh
+            for day in history
+            if not self._is_weekend(day.date)
+        ]
+
+        weekend_kwh = [
+            day.total_kwh
+            for day in history
+            if self._is_weekend(day.date)
+        ]
+
+        wd_avg = (
+            mean(weekday_kwh) if weekday_kwh else 0
+        )
+
+        we_avg = (
+            mean(weekend_kwh) if weekend_kwh else 0
+        )
+
+        # Average consumption for each hour
+        hourly_avgs: Dict[int, List[float]] = {
+            hour: [] for hour in range(24)
+        }
+
         for day in history:
             for reading in day.hourly:
-                hourly_avgs[reading.timestamp.hour].append(reading.kwh)
-        hourly_profile = {
-            h: round(mean(vals), 3)
-            for h, vals in hourly_avgs.items() if vals
-        }
-        peak_hour = max(hourly_profile, key=hourly_profile.get)
+                hourly_avgs[
+                    reading.timestamp.hour
+                ].append(reading.kwh)
 
-        # Anomaly days
-        anomalies = [
-            {"date": d.date, "kwh": d.total_kwh,
-             "deviation": round((d.total_kwh - avg) / sd, 1) if sd else 0}
-            for d in history if sd and abs(d.total_kwh - avg) > 1.5 * sd
-        ]
+        hourly_profile = {
+            hour: round(mean(values), 3)
+            for hour, values in hourly_avgs.items()
+            if values
+        }
+
+        peak_hour = (
+            max(hourly_profile, key=hourly_profile.get)
+            if hourly_profile else None
+        )
+
+        # Identify unusual daily consumption
+        anomalies = []
+
+        for day in history:
+
+            if sd > 0:
+
+                deviation = (
+                    day.total_kwh - avg
+                ) / sd
+
+                if abs(deviation) > 1.5:
+
+                    anomalies.append({
+                        "date": day.date,
+                        "kwh": day.total_kwh,
+                        "deviation": round(deviation, 1),
+                    })
 
         return {
             "tool": "pattern_detection",
+
             "avg_daily_kwh": round(avg, 2),
             "std_daily_kwh": round(sd, 2),
+
             "weekday_avg_kwh": round(wd_avg, 2),
             "weekend_avg_kwh": round(we_avg, 2),
-            "weekend_premium_pct": round(((we_avg - wd_avg) / wd_avg * 100), 1) if wd_avg else 0,
+
+            "weekend_premium_pct": (
+                round(
+                    ((we_avg - wd_avg) / wd_avg) * 100,
+                    1
+                )
+                if wd_avg > 0 else 0
+            ),
+
             "peak_consumption_hour": peak_hour,
+
             "hourly_profile": hourly_profile,
-            "anomaly_days": anomalies[:5],  # top 5
+
+            "anomaly_days": anomalies[:5],
+
             "total_anomaly_days": len(anomalies),
+
+            "data_note": (
+                "Patterns and anomalies are calculated "
+                "from simulated daily meter readings."
+            ),
         }
 
     @staticmethod
     def _is_weekend(date_str: str) -> bool:
         from datetime import datetime
-        return datetime.strptime(date_str, "%Y-%m-%d").weekday() >= 5
 
-    # ── Tool 6: Carbon Footprint ──────────────────────────────
+        return (
+            datetime.strptime(
+                date_str, "%Y-%m-%d"
+            ).weekday() >= 5
+        )
+
+    # ---------------------------------------------------------
+    # Tool 6: Carbon Footprint
+    # ---------------------------------------------------------
 
     def estimate_carbon(self) -> Dict[str, Any]:
-        """Estimates CO2 emissions based on average grid intensity."""
-        # US average grid emission factor: ~0.386 kg CO2e per kWh
-        EMISSION_FACTOR = 0.386
+        """
+        Estimates emissions using the configured US grid factor.
+
+        This factor is not a verified local grid factor for India.
+        """
+
+        emission_factor = 0.386
+
         total_kwh = self.snap.month_kwh
-        monthly_kg_co2 = round(total_kwh * EMISSION_FACTOR, 2)
-        # Equivalent trees needed to offset (1 tree absorbs ~22 kg CO2/year)
-        trees_needed = round(monthly_kg_co2 * 12 / 22, 1)
+
+        monthly_kg_co2 = round(
+            total_kwh * emission_factor, 2
+        )
+
+        trees_needed = round(
+            monthly_kg_co2 * 12 / 22, 1
+        )
+
         return {
             "tool": "carbon_estimate",
+
             "monthly_kwh": total_kwh,
+
             "monthly_kg_co2": monthly_kg_co2,
-            "monthly_tons_co2": round(monthly_kg_co2 / 1000, 3),
+
+            "monthly_tons_co2": round(
+                monthly_kg_co2 / 1000, 3
+            ),
+
             "trees_to_offset_annually": trees_needed,
-            "emission_factor_kg_per_kwh": EMISSION_FACTOR,
-            "note": "Based on US average grid emission factor (0.386 kg CO2e/kWh)",
+
+            "emission_factor_kg_per_kwh": (
+                emission_factor
+            ),
+
+            "note": (
+                "Uses a US average grid emission factor "
+                "of 0.386 kg CO2e/kWh. This is an illustrative "
+                "estimate, not a verified India-specific "
+                "emission calculation."
+            ),
         }
