@@ -531,8 +531,8 @@ class SmartHomeEnergyAdvisor:
         tool_results: List[Dict[str, Any]],
     ) -> str | None:
         """
-        Builds an accurate appliance consumption report
-        using verified appliance audit data.
+        Builds an accurate appliance energy consumption report
+        using configured appliance audit estimates.
         """
 
         audit = next(
@@ -560,8 +560,6 @@ class SmartHomeEnergyAdvisor:
         if not total_daily:
             return None
 
-        currency = audit.get("currency", "USD")
-
         sorted_appliances = sorted(
             appliances,
             key=lambda item: float(item.get("daily_kwh", 0)),
@@ -569,7 +567,7 @@ class SmartHomeEnergyAdvisor:
         )
 
         response = (
-            "## Appliance Consumption Analysis\n\n"
+            "## Appliance Energy Consumption Analysis\n\n"
             "**Daily and monthly appliance consumption estimates:**\n\n"
             "| Appliance | Daily Usage | Monthly Usage | Contribution |\n"
             "|---|---:|---:|---:|\n"
@@ -596,7 +594,7 @@ class SmartHomeEnergyAdvisor:
 
         response += (
             "\n### Key Findings\n\n"
-            "**Top 3 electricity consumers:**\n\n"
+            "**Top 3 energy-consuming appliances:**\n\n"
         )
 
         for index, appliance in enumerate(top_three, start=1):
@@ -612,13 +610,12 @@ class SmartHomeEnergyAdvisor:
             f"daily appliance consumption "
             f"({top_three_daily:.1f} kWh out of "
             f"{total_daily} kWh).\n\n"
-            f"**Total estimated daily consumption:** "
+            f"**Total estimated daily energy consumption:** "
             f"{total_daily} kWh.\n\n"
-            f"**Estimated monthly appliance cost:** "
-            f"{currency} {audit.get('total_monthly_cost', 'N/A')}.\n\n"
             "**Important:** These figures are based on configured "
-            "daily appliance estimates. They are not actual "
-            "smart-meter readings or the actual electricity bill."
+            "daily appliance consumption estimates. They represent "
+            "estimated energy usage, not actual smart-meter readings "
+            "or verified electricity costs."
         )
 
         return response

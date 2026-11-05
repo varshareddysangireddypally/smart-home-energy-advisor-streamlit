@@ -221,8 +221,12 @@ st.caption(
 )
 
 st.info(
-    "This project uses simulated smart-meter readings and estimated "
-    "appliance consumption. Results are illustrative, not actual household bills."
+    "Data & AI Transparency: This project uses simulated smart-meter "
+    "readings and configured appliance consumption estimates. AI "
+    "recommendations are based on the available data. Actual appliance "
+    "operating times may be unknown. Potential savings are theoretical "
+    "estimates, not guaranteed results. Please verify recommendations "
+    "before applying them."
 )
 
 st.divider()
