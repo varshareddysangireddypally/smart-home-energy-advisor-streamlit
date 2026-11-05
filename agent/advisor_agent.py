@@ -45,6 +45,7 @@ INTENT_TOOL_MAP: Dict[str, List[str]] = {
         "current_status",
         "monthly_bill_analysis",
         "appliance_audit",
+        "optimal_schedule",
     ],
     "APPLIANCE_SCHEDULE": [
         "current_status",
@@ -77,7 +78,6 @@ INTENT_TOOL_MAP: Dict[str, List[str]] = {
 
 # -------------------------------------------------------------
 # Keyword-based intent classification
-# Specific patterns must be checked before general keywords.
 # -------------------------------------------------------------
 
 KEYWORD_INTENT_MAP = [
@@ -262,7 +262,6 @@ class SmartHomeEnergyAdvisor:
                 )
                 return intent
 
-        # Use Granite only when keyword matching is inconclusive.
         intent_prompt = (
             self.prompt_builder
             .build_intent_classification_prompt(question)
@@ -333,6 +332,298 @@ class SmartHomeEnergyAdvisor:
         return results
 
     # ---------------------------------------------------------
+    # Deterministic bill reduction response
+    # ---------------------------------------------------------
+
+    def _build_bill_reduction_response(
+        self,
+        tool_results: List[Dict[str, Any]],
+    ) -> str | None:
+        """Builds a factual bill-reduction response."""
+
+        schedule_result = next(
+            (
+                result
+                for result in tool_results
+                if result.get("tool") == "optimal_schedule"
+            ),
+            None,
+        )
+
+        if not schedule_result:
+            return None
+
+        appliances = schedule_result.get(
+            "shiftable_appliances",
+            [],
+        )
+
+        if not appliances:
+            return None
+
+        currency = schedule_result.get("currency", "USD")
+
+        total_saving = schedule_result.get(
+            "total_monthly_saving_potential"
+        )
+
+        if total_saving is None:
+            return None
+
+        off_peak_window = schedule_result.get(
+            "off_peak_window",
+            "Not available",
+        )
+
+        peak_rate = schedule_result.get(
+            "peak_rate",
+            "Not available",
+        )
+
+        off_peak_rate = schedule_result.get(
+            "off_peak_rate",
+            "Not available",
+        )
+
+        response = (
+            "## Electricity Bill Reduction Recommendations\n\n"
+            "Based on the available appliance scheduling "
+            "and tariff data:\n\n"
+            "### 1. Use the off-peak window\n\n"
+            f"- **Off-peak window:** {off_peak_window}\n"
+            f"- **Peak rate:** {currency} {peak_rate}/kWh\n"
+            f"- **Off-peak rate:** {currency} {off_peak_rate}/kWh\n\n"
+            "### 2. Prioritise these shiftable appliances\n\n"
+            "| Appliance | Daily Usage | Theoretical Monthly Saving |\n"
+            "|---|---:|---:|\n"
+        )
+
+        for appliance in appliances:
+            name = appliance.get("appliance", "Unknown")
+            daily_kwh = appliance.get("daily_kwh", "N/A")
+            monthly_saving = appliance.get("monthly_saving", "N/A")
+
+            response += (
+                f"| {name} | {daily_kwh} kWh | "
+                f"{currency} {monthly_saving} |\n"
+            )
+
+        response += (
+            "\n### 3. Estimated savings potential\n\n"
+            f"The combined theoretical maximum is "
+            f"**{currency} {total_saving} per month**.\n\n"
+            "**Important:** This estimate assumes the full "
+            "configured daily consumption of every listed "
+            "shiftable appliance can be moved from peak to "
+            "off-peak hours. Actual savings may be lower. "
+            "This is a theoretical estimate, not a guaranteed "
+            "reduction in your electricity bill.\n\n"
+            "The appliance schedule estimates and smart-meter "
+            "bill measurements are separate data sources."
+        )
+
+        return response
+
+    # ---------------------------------------------------------
+    # Deterministic appliance scheduling response
+    # ---------------------------------------------------------
+
+    def _build_appliance_schedule_response(
+        self,
+        tool_results: List[Dict[str, Any]],
+    ) -> str | None:
+        """Builds a factual appliance scheduling response."""
+
+        schedule_result = next(
+            (
+                result
+                for result in tool_results
+                if result.get("tool") == "optimal_schedule"
+            ),
+            None,
+        )
+
+        if not schedule_result:
+            return None
+
+        appliances = schedule_result.get(
+            "shiftable_appliances",
+            [],
+        )
+
+        if not appliances:
+            return None
+
+        currency = schedule_result.get("currency", "USD")
+
+        off_peak_window = schedule_result.get(
+            "off_peak_window",
+            "Not available",
+        )
+
+        off_peak_rate = schedule_result.get(
+            "off_peak_rate",
+            "Not available",
+        )
+
+        peak_rate = schedule_result.get(
+            "peak_rate",
+            "Not available",
+        )
+
+        total_saving = schedule_result.get(
+            "total_monthly_saving_potential"
+        )
+
+        if total_saving is None:
+            return None
+
+        response = (
+            "## Recommended Appliance Schedule\n\n"
+            "### Best available off-peak window\n\n"
+            f"- **Off-peak hours:** {off_peak_window}\n"
+            f"- **Off-peak rate:** {currency} "
+            f"{off_peak_rate}/kWh\n"
+            f"- **Peak rate:** {currency} "
+            f"{peak_rate}/kWh\n\n"
+            "### Appliances identified by the schedule tool\n\n"
+            "| Appliance | Configured Daily Usage |\n"
+            "|---|---:|\n"
+        )
+
+        for appliance in appliances:
+            name = appliance.get("appliance", "Unknown")
+            daily_kwh = appliance.get("daily_kwh", "N/A")
+
+            response += (
+                f"| {name} | {daily_kwh} kWh/day |\n"
+            )
+
+        response += (
+            "\n### Estimated savings\n\n"
+            f"Shifting the configured consumption of all "
+            f"listed appliances from peak to off-peak hours "
+            f"has a theoretical maximum saving of "
+            f"**{currency} {total_saving} per month**.\n\n"
+            "### Practical guidance\n\n"
+            f"Where practical, schedule flexible appliances "
+            f"during the {off_peak_window} off-peak window. "
+            "Consider appliance operating requirements, "
+            "comfort, safety, and manufacturer instructions "
+            "before changing schedules.\n\n"
+            "**Important:** The savings figure is theoretical. "
+            "It assumes the full configured daily consumption "
+            "of every listed appliance can be shifted from "
+            "peak to off-peak hours. Actual savings may be "
+            "lower and are not guaranteed. The available data "
+            "does not confirm each appliance's actual operating "
+            "time."
+        )
+
+        return response
+
+    # ---------------------------------------------------------
+    # Deterministic appliance audit response
+    # ---------------------------------------------------------
+
+    def _build_appliance_audit_response(
+        self,
+        tool_results: List[Dict[str, Any]],
+    ) -> str | None:
+        """
+        Builds an accurate appliance consumption report
+        using verified appliance audit data.
+        """
+
+        audit = next(
+            (
+                result
+                for result in tool_results
+                if result.get("tool") == "appliance_audit"
+            ),
+            None,
+        )
+
+        if not audit:
+            return None
+
+        appliances = audit.get("appliances", [])
+
+        if not appliances:
+            return None
+
+        total_daily = audit.get(
+            "total_daily_appliance_estimate_kwh",
+            0,
+        )
+
+        if not total_daily:
+            return None
+
+        currency = audit.get("currency", "USD")
+
+        sorted_appliances = sorted(
+            appliances,
+            key=lambda item: float(item.get("daily_kwh", 0)),
+            reverse=True,
+        )
+
+        response = (
+            "## Appliance Consumption Analysis\n\n"
+            "**Daily and monthly appliance consumption estimates:**\n\n"
+            "| Appliance | Daily Usage | Monthly Usage | Contribution |\n"
+            "|---|---:|---:|---:|\n"
+        )
+
+        for appliance in sorted_appliances:
+            response += (
+                f"| {appliance.get('name', 'Unknown')} "
+                f"| {appliance.get('daily_kwh', 0)} kWh "
+                f"| {appliance.get('monthly_kwh', 0)} kWh "
+                f"| {appliance.get('contribution_pct', 0)}% |\n"
+            )
+
+        top_three = sorted_appliances[:3]
+
+        top_three_daily = sum(
+            float(item.get("daily_kwh", 0))
+            for item in top_three
+        )
+
+        top_three_percentage = (
+            top_three_daily / float(total_daily)
+        ) * 100
+
+        response += (
+            "\n### Key Findings\n\n"
+            "**Top 3 electricity consumers:**\n\n"
+        )
+
+        for index, appliance in enumerate(top_three, start=1):
+            response += (
+                f"{index}. **{appliance.get('name')}** — "
+                f"{appliance.get('daily_kwh')} kWh/day "
+                f"({appliance.get('contribution_pct')}%).\n"
+            )
+
+        response += (
+            f"\nTogether, these three appliances account for "
+            f"**{top_three_percentage:.1f}%** of total estimated "
+            f"daily appliance consumption "
+            f"({top_three_daily:.1f} kWh out of "
+            f"{total_daily} kWh).\n\n"
+            f"**Total estimated daily consumption:** "
+            f"{total_daily} kWh.\n\n"
+            f"**Estimated monthly appliance cost:** "
+            f"{currency} {audit.get('total_monthly_cost', 'N/A')}.\n\n"
+            "**Important:** These figures are based on configured "
+            "daily appliance estimates. They are not actual "
+            "smart-meter readings or the actual electricity bill."
+        )
+
+        return response
+
+    # ---------------------------------------------------------
     # Agent reasoning loop
     # ---------------------------------------------------------
 
@@ -342,31 +633,87 @@ class SmartHomeEnergyAdvisor:
         Classify -> Execute tools -> Build prompt -> Generate response.
         """
 
-        # Step 1: Refresh smart-meter data.
         snapshot = self._refresh_snapshot()
 
-        # Step 2: Classify intent.
         intent = self._classify_intent(question)
 
         logger.info("Intent: %s", intent)
 
-        # Step 3: Run relevant tools.
         tool_results = self._run_tools(
             intent,
             snapshot,
         )
 
-        # Step 4: Build analysis prompt.
-        prompt = self.prompt_builder.build_analysis_prompt(
-            user_question=question,
-            tool_results=tool_results,
-            conversation_history=self.conversation_history,
+        question_lower = question.lower()
+
+        reduction_keywords = (
+            "reduce",
+            "lower",
+            "save",
+            "saving",
+            "cut",
+            "decrease",
         )
 
-        # Step 5: Generate response using IBM Granite.
-        response = self.granite.generate(prompt)
+        is_bill_reduction_question = (
+            intent == "BILL_ANALYSIS"
+            and any(
+                word in question_lower
+                for word in reduction_keywords
+            )
+        )
 
-        # Step 6: Update conversation history.
+        if is_bill_reduction_question:
+            response = self._build_bill_reduction_response(
+                tool_results
+            )
+
+            if response is None:
+                prompt = self.prompt_builder.build_analysis_prompt(
+                    user_question=question,
+                    tool_results=tool_results,
+                    conversation_history=self.conversation_history,
+                )
+
+                response = self.granite.generate(prompt)
+
+        elif intent == "APPLIANCE_SCHEDULE":
+            response = self._build_appliance_schedule_response(
+                tool_results
+            )
+
+            if response is None:
+                prompt = self.prompt_builder.build_analysis_prompt(
+                    user_question=question,
+                    tool_results=tool_results,
+                    conversation_history=self.conversation_history,
+                )
+
+                response = self.granite.generate(prompt)
+
+        elif intent == "APPLIANCE_AUDIT":
+            response = self._build_appliance_audit_response(
+                tool_results
+            )
+
+            if response is None:
+                prompt = self.prompt_builder.build_analysis_prompt(
+                    user_question=question,
+                    tool_results=tool_results,
+                    conversation_history=self.conversation_history,
+                )
+
+                response = self.granite.generate(prompt)
+
+        else:
+            prompt = self.prompt_builder.build_analysis_prompt(
+                user_question=question,
+                tool_results=tool_results,
+                conversation_history=self.conversation_history,
+            )
+
+            response = self.granite.generate(prompt)
+
         self.conversation_history.append({
             "role": "user",
             "content": question,
@@ -377,7 +724,6 @@ class SmartHomeEnergyAdvisor:
             "content": response,
         })
 
-        # Keep history bounded.
         if len(self.conversation_history) > 20:
             self.conversation_history = (
                 self.conversation_history[-20:]
@@ -454,22 +800,10 @@ class SmartHomeEnergyAdvisor:
         )
 
         table.add_row("Meter ID", snap.meter_id)
-        table.add_row(
-            "Current Draw",
-            f"{status['current_draw_kw']} kW",
-        )
-        table.add_row(
-            "Today's Usage",
-            f"{snap.today_kwh} kWh",
-        )
-        table.add_row(
-            "Month Usage",
-            f"{snap.month_kwh} kWh",
-        )
-        table.add_row(
-            "Month Cost (est.)",
-            f"${snap.month_cost:.2f}",
-        )
+        table.add_row("Current Draw", f"{status['current_draw_kw']} kW")
+        table.add_row("Today's Usage", f"{snap.today_kwh} kWh")
+        table.add_row("Month Usage", f"{snap.month_kwh} kWh")
+        table.add_row("Month Cost (est.)", f"${snap.month_cost:.2f}")
         table.add_row("Peak Hour Now", pk)
         table.add_row(
             "Active Appliances",
@@ -616,7 +950,6 @@ class SmartHomeEnergyAdvisor:
                 self._print_top_consumers()
                 continue
 
-            # Normal question -> agent loop.
             console.print(
                 "\n[dim]🔍 Analysing your smart meter data...[/dim]\n"
             )
