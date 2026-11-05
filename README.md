@@ -17,7 +17,7 @@
 
 The **Smart Home Energy Advisor Agent** is an AI-powered personal electricity manager that helps users understand, monitor, and optimize their household electricity consumption.
 
-The application analyzes smart meter readings, appliance usage statistics, and historical energy consumption patterns to provide useful insights and personalized energy-saving recommendations.
+The current application uses simulated smart-meter readings, configured appliance consumption estimates, and historical energy data to provide insights and energy-saving recommendations. It does not currently connect to physical smart-meter hardware or measure actual household appliance usage.
 
 Users can ask natural-language questions such as:
 
@@ -35,7 +35,7 @@ The system combines deterministic energy analysis with **IBM Granite AI** to gen
 
 **Problem Statement No. 31 – Smart Home Energy Advisor Agent**
 
-A Smart Home Energy Advisor Agent acts as a personal electricity manager. It analyzes smart meter and appliance usage data, identifies consumption patterns, explains high electricity bills, and provides recommendations to reduce energy consumption and electricity costs.
+A Smart Home Energy Advisor Agent acts as a personal electricity advisor. It analyzes available smart-meter data and appliance usage estimates, identifies consumption patterns, explains electricity costs, and provides recommendations to improve energy efficiency.
 
 Our solution addresses this challenge through an AI-powered energy advisory application.
 
@@ -47,11 +47,11 @@ Our solution addresses this challenge through an AI-powered energy advisory appl
 |---|---|
 | Bill Analysis | Explains why electricity bills are increasing. |
 | Appliance Analysis | Identifies high-energy-consuming appliances. |
-| Energy Consumption Monitoring | Analyzes monthly and daily electricity usage. |
+| Energy Consumption Analysis | Analyzes simulated daily and monthly electricity usage data. |
 | Peak-Hour Analysis | Identifies electricity consumption during peak hours. |
 | Energy-Saving Recommendations | Suggests practical ways to reduce electricity costs. |
 | AI-Powered Chat | Allows users to ask questions in natural language. |
-| Smart Meter Data Analysis | Uses meter readings and appliance consumption information. |
+| Simulated Smart Meter Analysis | Uses simulated meter readings and configured appliance consumption estimates. |
 | Interactive Dashboard | Presents energy insights through a user-friendly interface. |
 
 ---
@@ -60,49 +60,36 @@ Our solution addresses this challenge through an AI-powered energy advisory appl
 
 The Smart Home Energy Advisor follows an AI-powered analysis workflow:
 
-1. **Data Collection:** Reads smart meter readings and appliance usage information.
-2. **Intent Identification:** Understands the user's question and identifies the required analysis.
-3. **Energy Analysis:** Processes consumption data using analytical functions.
-4. **Prompt Generation:** Combines the analysis results into a structured prompt.
-5. **AI Response:** IBM Granite generates a natural-language explanation.
-6. **Recommendations:** Provides practical suggestions to improve energy efficiency.
+1. **Data Collection:** Loads simulated smart-meter readings and configured appliance consumption estimates.
+2. **Intent Identification:** Identifies the user's question and the relevant analysis.
+3. **Energy Analysis:** Processes available data using deterministic analytical functions.
+4. **Response Preparation:** Builds structured context from the analysis results.
+5. **AI Response:** IBM Granite generates natural-language explanations for supported questions; selected analyses use deterministic responses.
+6. **Recommendations:** Presents practical, data-based suggestions with appropriate limitations.
 
 ### System Architecture
 
 ```text
-             USER
-              |
-              v
-      Streamlit Web Interface
-              |
-              v
-       AI Advisor Agent
-              |
-              v
-       Intent Identification
-              |
-              v
-       Energy Analysis Tools
-              |
-       +------+------+
-       |             |
-       v             v
-  Smart Meter    Appliance Usage
-       |             |
-       +------+------+
-              |
-              v
-        Prompt Builder
-              |
-              v
-        IBM Granite AI
-         (watsonx.ai)
-              |
-              v
-    Natural Language Response
-              |
-              v
-   Energy-Saving Recommendations
+User
+  |
+  v
+Streamlit Interface (app.py)
+  |
+  v
+Advisor Agent - Intent Identification
+  |
+  +---------------------------+
+  |                           |
+  v                           v
+Deterministic Analysis    Prompt Builder
+Tools                         |
+(Bill, Audit, Schedule)       v
+  |                       IBM Granite AI
+  |                           |
+  +-------------+-------------+
+                |
+                v
+       Responses and Recommendations
 ```
 
 ---
@@ -128,25 +115,30 @@ The Smart Home Energy Advisor follows an AI-powered analysis workflow:
 SmartHome_Energy/
 │
 ├── app.py
+├── main.py
+├── test_agent.py
+├── README.md
 ├── requirements.txt
 ├── env.example
 ├── .gitignore
 │
 ├── agent/
+│   ├── __init__.py
 │   ├── advisor_agent.py
 │   ├── granite_client.py
 │   └── prompt_builder.py
 │
 ├── data/
+│   ├── __init__.py
 │   └── smart_meter.py
 │
 └── tools/
+    ├── __init__.py
     ├── energy_analyzer.py
     ├── cost_calculator.py
     └── report_generator.py
 ```
 
-*Note: The structure above represents the main application files. Refer to the repository for the complete project structure.*
 
 ---
 
@@ -201,15 +193,30 @@ This project integrates **IBM Granite 4 H Small** through the official IBM watso
 
 IBM Granite AI is used to:
 
-- Understand user questions about electricity consumption.
-- Explain energy usage patterns.
-- Generate natural-language bill explanations.
-- Provide personalized energy-saving recommendations.
+- Interpret supported user questions about electricity consumption.
+- Explain energy usage patterns using the available data.
+- Generate natural-language explanations and recommendations.
+
+Selected analyses, including bill reduction, appliance audits, and scheduling, use deterministic application logic rather than AI-generated calculations.
 
 The application uses IBM watsonx.ai credentials configured through environment variables.
 
 ---
 
+## 🛡️ Responsible AI and Data Limitations
+
+This project is designed as an educational energy-advisory application. Its results should be interpreted with the following limitations:
+
+- **Simulated data:** The current version uses simulated smart-meter readings and configured appliance consumption estimates, not measurements from physical smart-meter hardware.
+- **Estimated appliance usage:** Actual appliance operating times and real household consumption may be unknown.
+- **Estimated costs:** Appliance costs depend on configured consumption estimates and electricity tariff settings. They may differ from actual electricity bills.
+- **Potential savings:** Savings figures are theoretical estimates based on stated assumptions, not guaranteed reductions.
+- **AI-generated explanations:** IBM Granite responses may contain inaccuracies. Users should verify important information before acting on recommendations.
+- **No live hardware connection:** Real-time smart-meter integration is a planned future enhancement.
+
+The application aims to provide transparent, data-based energy insights while clearly communicating uncertainty and limitations.
+
+---
 ## ☁️ Deployment
 
 The application is deployed using **Render**.
