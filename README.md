@@ -1,185 +1,273 @@
 # Smart Home Energy Advisor Agent
 
 > **IBM Agentic AI Project — Problem Statement No. 31**  
-> Electrical Engineering · IBM Cloud Lite + IBM Granite AI (`ibm/granite-13b-instruct-v2`)
+> AI-Powered Smart Home Electricity Management using IBM Granite AI and IBM watsonx.ai.
+
+## 🚀 Live Demo
+
+**Try the deployed application here:**
+
+[Smart Home Energy Advisor – Live Website](https://smart-home-energy-advisor-streamlit.onrender.com)
+
+> Note: The application is hosted on Render's free tier. The first request after inactivity may take some time while the service starts.
 
 ---
 
-## Overview
+## 📌 Overview
 
-The **Smart Home Energy Advisor Agent** is an AI-powered personal electricity manager. It reads data from a smart meter and connected appliances, analyses power usage patterns, and answers natural-language questions like:
+The **Smart Home Energy Advisor Agent** is an AI-powered personal electricity manager that helps users understand, monitor, and optimize their household electricity consumption.
 
-- *"Why is my bill so high this month?"*
-- *"What time should I run the washing machine to save money?"*
-- *"Which appliances are costing me the most?"*
-- *"What are my peak usage patterns?"*
-- *"What is my home's carbon footprint?"*
+The application analyzes smart meter readings, appliance usage statistics, and historical energy consumption patterns to provide useful insights and personalized energy-saving recommendations.
 
-The agent uses a **ReAct (Reason → Act → Observe → Respond)** loop: it classifies the user's intent, runs deterministic analytical tools to gather structured data, builds a context-rich prompt, and sends it to **IBM Granite AI** for natural-language generation.
+Users can ask natural-language questions such as:
 
----
+- Why is my electricity bill so high this month?
+- Which appliances consume the most electricity?
+- How can I reduce my electricity bill?
+- What are my peak-hour consumption patterns?
+- What is the best time to operate high-energy appliances?
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Smart Home Energy Advisor               │
-│                                                          │
-│  User Question                                           │
-│       │                                                  │
-│       ▼                                                  │
-│  ┌─────────────────┐    ┌──────────────────────────┐    │
-│  │ Intent Classifier│───▶│    Tool Selector         │    │
-│  │ (keyword + AI)   │    │  (BILL / SCHEDULE /      │    │
-│  └─────────────────┘    │   AUDIT / PATTERN / ...)  │    │
-│                          └────────────┬─────────────┘    │
-│                                       │                  │
-│                          ┌────────────▼─────────────┐    │
-│  ┌──────────────────┐    │     Energy Analyzer       │    │
-│  │  Smart Meter      │───▶│  Tools (6 deterministic   │    │
-│  │  Simulator        │    │  analysis functions)      │    │
-│  │  (or real API)    │    └────────────┬─────────────┘    │
-│  └──────────────────┘                 │                  │
-│                          ┌────────────▼─────────────┐    │
-│                          │    Prompt Builder         │    │
-│                          │ (Granite instruction fmt) │    │
-│                          └────────────┬─────────────┘    │
-│                                       │                  │
-│                          ┌────────────▼─────────────┐    │
-│                          │  IBM Granite AI            │    │
-│                          │  (ibm/granite-13b-v2)      │    │
-│                          │  via ibm-watsonx-ai SDK    │    │
-│                          └────────────┬─────────────┘    │
-│                                       │                  │
-│                               Natural Language           │
-│                               Response to User           │
-└─────────────────────────────────────────────────────────┘
-```
+The system combines deterministic energy analysis with **IBM Granite AI** to generate understandable explanations and practical recommendations.
 
 ---
 
-## Project Structure
+## 🎯 Problem Statement
 
+**Problem Statement No. 31 – Smart Home Energy Advisor Agent**
+
+A Smart Home Energy Advisor Agent acts as a personal electricity manager. It analyzes smart meter and appliance usage data, identifies consumption patterns, explains high electricity bills, and provides recommendations to reduce energy consumption and electricity costs.
+
+Our solution addresses this challenge through an AI-powered energy advisory application.
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+|---|---|
+| Bill Analysis | Explains why electricity bills are increasing. |
+| Appliance Analysis | Identifies high-energy-consuming appliances. |
+| Energy Consumption Monitoring | Analyzes monthly and daily electricity usage. |
+| Peak-Hour Analysis | Identifies electricity consumption during peak hours. |
+| Energy-Saving Recommendations | Suggests practical ways to reduce electricity costs. |
+| AI-Powered Chat | Allows users to ask questions in natural language. |
+| Smart Meter Data Analysis | Uses meter readings and appliance consumption information. |
+| Interactive Dashboard | Presents energy insights through a user-friendly interface. |
+
+---
+
+## 🧠 How It Works
+
+The Smart Home Energy Advisor follows an AI-powered analysis workflow:
+
+1. **Data Collection:** Reads smart meter readings and appliance usage information.
+2. **Intent Identification:** Understands the user's question and identifies the required analysis.
+3. **Energy Analysis:** Processes consumption data using analytical functions.
+4. **Prompt Generation:** Combines the analysis results into a structured prompt.
+5. **AI Response:** IBM Granite generates a natural-language explanation.
+6. **Recommendations:** Provides practical suggestions to improve energy efficiency.
+
+### System Architecture
+
+```text
+             USER
+              |
+              v
+      Streamlit Web Interface
+              |
+              v
+       AI Advisor Agent
+              |
+              v
+       Intent Identification
+              |
+              v
+       Energy Analysis Tools
+              |
+       +------+------+
+       |             |
+       v             v
+  Smart Meter    Appliance Usage
+       |             |
+       +------+------+
+              |
+              v
+        Prompt Builder
+              |
+              v
+        IBM Granite AI
+         (watsonx.ai)
+              |
+              v
+    Natural Language Response
+              |
+              v
+   Energy-Saving Recommendations
 ```
+
+---
+
+## 🛠️ Technology Stack
+
+| Component | Technology |
+|---|---|
+| Frontend / User Interface | Streamlit |
+| Programming Language | Python |
+| AI Model | IBM Granite 4 H Small |
+| AI Platform | IBM watsonx.ai |
+| IBM SDK | ibm-watsonx-ai |
+| Environment Configuration | python-dotenv |
+| Deployment | Render |
+| Version Control | Git and GitHub |
+
+---
+
+## 📂 Project Structure
+
+```text
 SmartHome_Energy/
-├── main.py                    # Entry point
-├── requirements.txt           # Python dependencies
-├── env.example                # .env template (copy to .env)
+│
+├── app.py
+├── requirements.txt
+├── env.example
+├── .gitignore
 │
 ├── agent/
-│   ├── advisor_agent.py       # Main agentic loop (ReAct pattern)
-│   ├── granite_client.py      # IBM Granite AI client (watsonx.ai SDK)
-│   └── prompt_builder.py      # Prompt construction for Granite
+│   ├── advisor_agent.py
+│   ├── granite_client.py
+│   └── prompt_builder.py
 │
 ├── data/
-│   └── smart_meter.py         # Smart meter simulator + data models
+│   └── smart_meter.py
 │
 └── tools/
-    ├── energy_analyzer.py     # 6 analytical tools (bill, audit, schedule…)
-    ├── cost_calculator.py     # Time-of-use cost utilities
-    └── report_generator.py    # Rich console & text report formatting
+    ├── energy_analyzer.py
+    ├── cost_calculator.py
+    └── report_generator.py
 ```
+
+*Note: The structure above represents the main application files. Refer to the repository for the complete project structure.*
 
 ---
 
-## Quick Start
+## ⚙️ Installation and Setup
 
-### 1. Install dependencies
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/varshareddysangireddypally/smart-home-energy-advisor-streamlit.git
+```
+
+### 2. Navigate to the Project Folder
+
+```bash
+cd smart-home-energy-advisor-streamlit
+```
+
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure IBM Cloud credentials
+### 4. Configure Environment Variables
 
-Copy `env.example` to `.env` and fill in your IBM Cloud details:
+Create a `.env` file using the provided `env.example` template.
 
-```bash
-copy env.example .env   # Windows
-cp env.example .env     # macOS/Linux
-```
-
-Edit `.env`:
+Add your IBM watsonx.ai credentials:
 
 ```env
-IBM_WATSONX_API_KEY=<your API key from cloud.ibm.com>
-IBM_WATSONX_PROJECT_ID=<your watsonx.ai project ID>
+IBM_WATSONX_API_KEY=your_api_key
+IBM_WATSONX_PROJECT_ID=your_project_id
 IBM_WATSONX_URL=https://us-south.ml.cloud.ibm.com
-IBM_GRANITE_MODEL_ID=ibm/granite-13b-instruct-v2
+IBM_GRANITE_MODEL_ID=ibm/granite-4-h-small
 ```
 
-> **Note:** If credentials are not set, the agent runs in **DEMO mode** with rule-based responses — fully functional for evaluation without an IBM account.
+**Important:** Never upload your actual API keys or `.env` file to GitHub.
 
-### 3. Run the agent
+### 5. Run the Application
 
 ```bash
-python main.py
+streamlit run app.py
 ```
 
----
-
-## Getting IBM Cloud Lite Credentials (Free Tier)
-
-1. Sign up at [cloud.ibm.com](https://cloud.ibm.com) — Lite plan is free, no credit card required.
-2. Create a **watsonx.ai** instance (Lite tier available).
-3. Go to **Manage → Access → API Keys** → create a new API key.
-4. In watsonx.ai, create a **Project** → copy the Project ID from the project settings.
-5. Paste both values into your `.env` file.
+The application will open in your local browser.
 
 ---
 
-## Agent Capabilities
+## 🤖 IBM Granite AI Integration
 
-| Feature | Description |
-|---|---|
-| **Bill Analysis** | Breaks down monthly cost by category, peak/off-peak split, trend |
-| **Appliance Audit** | Ranks all appliances by monthly cost, flags optimisable devices |
-| **Schedule Optimiser** | Recommends best hours to run shiftable loads (TOU tariff) |
-| **Pattern Detection** | Identifies anomalies, weekend vs weekday differences, hourly profile |
-| **Carbon Footprint** | Estimates monthly CO₂ emissions and tree-equivalent offset |
-| **Contextual Q&A** | Maintains conversation history for follow-up questions |
-| **Demo Mode** | Works without IBM credentials using rule-based fallback responses |
+This project integrates **IBM Granite 4 H Small** through the official IBM watsonx.ai Python SDK.
 
----
+IBM Granite AI is used to:
 
-## Example Session
+- Understand user questions about electricity consumption.
+- Explain energy usage patterns.
+- Generate natural-language bill explanations.
+- Provide personalized energy-saving recommendations.
 
-```
-You: Why is my electricity bill so high this month?
-
-⚡ Energy Advisor:
-Your bill is elevated this month primarily due to three factors:
-1. HVAC usage — heating/cooling accounts for ~45% of your consumption.
-2. Evening peak-hour usage — running heavy appliances between 5 PM–9 PM
-   triples your effective rate.
-3. EV charging — detected during peak hours, adding ~$18 to your bill.
-
-Recommendation: shift EV charging and laundry to after 10 PM to save up to 30%.
-```
+The application uses IBM watsonx.ai credentials configured through environment variables.
 
 ---
 
-## Technology Stack
+## ☁️ Deployment
 
-| Component | Technology |
-|---|---|
-| AI Model | IBM Granite 13B Instruct v2 |
-| AI Platform | IBM watsonx.ai (IBM Cloud Lite) |
-| SDK | `ibm-watsonx-ai` Python SDK |
-| Data Simulation | Custom smart meter simulator |
-| CLI | `rich` (Python terminal UI) |
-| Config | `python-dotenv` |
+The application is deployed using **Render**.
 
----
+- **Hosting Platform:** Render
+- **Application Framework:** Streamlit
+- **Source Code:** GitHub
+- **AI Service:** IBM watsonx.ai
 
-## IBM Cloud Lite Compliance
+### Live Application
 
-- Uses **IBM Granite** (`ibm/granite-13b-instruct-v2`) — IBM's own foundation model.
-- Connects via **ibm-watsonx-ai** SDK — the official IBM Cloud SDK.
-- Designed to run within **IBM Cloud Lite free-tier** quotas:
-  - ≤ 25,000 tokens/month input (advisory use stays well within limits)
-  - No GPU provisioning required (serverless inference)
+https://smart-home-energy-advisor-streamlit.onrender.com
 
 ---
 
-*Problem Statement No. 31 — IBM Agentic AI Project — Electrical Engineering*
+## 🔮 Future Enhancements
+
+- Integration with real-time smart meter hardware.
+- Individual user accounts and personalized household profiles.
+- Historical consumption reports and visual analytics.
+- Electricity tariff integration for more accurate cost predictions.
+- Automated alerts for unusual energy consumption.
+- Mobile-friendly energy monitoring experience.
+
+---
+
+## 🌱 Expected Impact
+
+The Smart Home Energy Advisor Agent aims to:
+
+- Help households understand electricity consumption.
+- Identify appliances responsible for high energy usage.
+- Encourage efficient electricity usage.
+- Reduce unnecessary energy consumption.
+- Promote cost savings and environmental awareness.
+
+---
+
+## 👩‍💻 Project Information
+
+**Project Name:** Smart Home Energy Advisor Agent
+
+**Problem Statement:** No. 31
+
+**Domain:** Agentic AI / Smart Energy Management
+
+**AI Technology:** IBM Granite AI
+
+**AI Platform:** IBM watsonx.ai
+
+**Deployment:** Render
+
+**GitHub Repository:**  
+https://github.com/varshareddysangireddypally/smart-home-energy-advisor-streamlit
+
+**Live Demo:**  
+https://smart-home-energy-advisor-streamlit.onrender.com
+
+---
+
+*Developed as part of the IBM Agentic AI Project — Problem Statement No. 31.*
