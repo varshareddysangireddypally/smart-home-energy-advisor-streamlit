@@ -2,15 +2,15 @@
 """
 agent/advisor_agent.py
 
-The main Agentic AI loop for the Smart Home Energy Advisor.
+Main Agentic AI loop for the Smart Home Energy Advisor.
 
-Architecture — ReAct-style (Reason → Act → Observe → Respond):
-  1. Receive user question
-  2. Classify intent → select relevant tools
-  3. Run tools to gather structured data
-  4. Build a data-rich prompt
-  5. Send to IBM Granite for language generation
-  6. Return response to user
+Architecture:
+1. Receive user question
+2. Classify intent
+3. Execute relevant analysis tools
+4. Build a data-rich prompt
+5. Generate response using IBM Granite
+6. Return response
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ console = Console()
 
 
 # -------------------------------------------------------------
-# Intent → Tool mapping
+# Intent to tool mapping
 # -------------------------------------------------------------
 
 INTENT_TOOL_MAP: Dict[str, List[str]] = {
@@ -77,40 +77,106 @@ INTENT_TOOL_MAP: Dict[str, List[str]] = {
 
 # -------------------------------------------------------------
 # Keyword-based intent classification
-# Specific patterns are checked before general bill keywords.
+# Specific patterns must be checked before general keywords.
 # -------------------------------------------------------------
 
 KEYWORD_INTENT_MAP = [
     (
-        ["pattern", "trend", "anomal", "spike", "unusual",
-         "weekend", "weekday", "hourly consumption"],
+        [
+            "pattern",
+            "trend",
+            "anomal",
+            "spike",
+            "unusual",
+            "weekend",
+            "weekday",
+            "hourly consumption",
+            "hourly usage",
+            "hourly pattern",
+            "peak consumption",
+            "peak usage",
+            "peak hour",
+            "consumption peak",
+            "usage peak",
+            "highest consumption",
+            "highest usage",
+            "highest at",
+            "maximum consumption",
+            "maximum usage",
+            "maximum at",
+            "lowest consumption",
+            "lowest usage",
+            "lowest at",
+            "consumption highest",
+            "usage highest",
+            "consumption lowest",
+            "usage lowest",
+        ],
         "USAGE_PATTERN",
     ),
     (
-        ["washing", "washer", "dryer", "dishwasher",
-         "schedule", "when", "time to run"],
+        [
+            "washing",
+            "washer",
+            "dryer",
+            "dishwasher",
+            "schedule",
+            "when",
+            "time to run",
+        ],
         "APPLIANCE_SCHEDULE",
     ),
     (
-        ["appliance", "device", "which", "most",
-         "top", "biggest"],
+        [
+            "appliance",
+            "device",
+            "which",
+            "most",
+            "top",
+            "biggest",
+        ],
         "APPLIANCE_AUDIT",
     ),
     (
-        ["bill", "expensive", "high bill", "electricity bill",
-         "monthly bill", "charge"],
+        [
+            "bill",
+            "expensive",
+            "high bill",
+            "electricity bill",
+            "monthly bill",
+            "charge",
+        ],
         "BILL_ANALYSIS",
     ),
     (
-        ["carbon", "co2", "emission", "environment", "green"],
+        [
+            "carbon",
+            "co2",
+            "emission",
+            "environment",
+            "green",
+        ],
         "CARBON_FOOTPRINT",
     ),
     (
-        ["now", "current", "right now", "at the moment", "live"],
+        [
+            "now",
+            "current",
+            "right now",
+            "at the moment",
+            "live",
+        ],
         "CURRENT_STATUS",
     ),
     (
-        ["save", "tip", "recommend", "advice", "help", "reduce"],
+        [
+            "save",
+            "tip",
+            "recommend",
+            "advice",
+            "help",
+            "reduce",
+        ],
         "GENERAL_ADVICE",
     ),
 ]
@@ -119,30 +185,43 @@ KEYWORD_INTENT_MAP = [
 class SmartHomeEnergyAdvisor:
     """
     Top-level agent orchestrator.
-    Manages the sensor/data layer, AI client, and CLI interface.
+    Manages the data layer, AI client, and CLI interface.
     """
 
     def __init__(self):
         self.meter = SmartMeterSimulator(
-            meter_id=os.getenv("SMART_METER_ID", "SM-HOME-001"),
-            rate=float(os.getenv("ENERGY_RATE_PER_KWH", "0.12")),
+            meter_id=os.getenv(
+                "SMART_METER_ID",
+                "SM-HOME-001"
+            ),
+            rate=float(
+                os.getenv("ENERGY_RATE_PER_KWH", "0.12")
+            ),
             peak_multiplier=float(
                 os.getenv("PEAK_RATE_MULTIPLIER", "1.5")
             ),
             off_peak_multiplier=float(
                 os.getenv("OFF_PEAK_RATE_MULTIPLIER", "0.7")
             ),
-            peak_start=int(os.getenv("PEAK_HOURS_START", "17")),
-            peak_end=int(os.getenv("PEAK_HOURS_END", "21")),
-            history_days=int(os.getenv("MAX_HISTORY_DAYS", "30")),
+            peak_start=int(
+                os.getenv("PEAK_HOURS_START", "17")
+            ),
+            peak_end=int(
+                os.getenv("PEAK_HOURS_END", "21")
+            ),
+            history_days=int(
+                os.getenv("MAX_HISTORY_DAYS", "30")
+            ),
         )
 
         self.granite = GraniteClient()
         self.prompt_builder = PromptBuilder()
         self.conversation_history: List[Dict[str, str]] = []
+
         self.max_iterations = int(
             os.getenv("AGENT_MAX_ITERATIONS", "10")
         )
+
         self._snapshot: SmartMeterSnapshot | None = None
 
     # ---------------------------------------------------------
@@ -169,18 +248,21 @@ class SmartHomeEnergyAdvisor:
 
     def _classify_intent(self, question: str) -> str:
         """
-        Two-step intent detection:
-        1. Fast keyword matching.
-        2. Granite classification if the question is ambiguous.
+        Classifies questions using keyword matching first.
+        Granite classification is used only for ambiguous questions.
         """
 
         q_lower = question.lower()
 
         for keywords, intent in KEYWORD_INTENT_MAP:
             if any(keyword in q_lower for keyword in keywords):
+                logger.info(
+                    "Keyword intent detected: %s",
+                    intent,
+                )
                 return intent
 
-        # Ambiguous question — ask Granite.
+        # Use Granite only when keyword matching is inconclusive.
         intent_prompt = (
             self.prompt_builder
             .build_intent_classification_prompt(question)
@@ -256,8 +338,8 @@ class SmartHomeEnergyAdvisor:
 
     def answer(self, question: str) -> str:
         """
-        Full ReAct agent cycle:
-        Reason → Act → Observe → Respond.
+        Full agent cycle:
+        Classify -> Execute tools -> Build prompt -> Generate response.
         """
 
         # Step 1: Refresh smart-meter data.
@@ -274,7 +356,7 @@ class SmartHomeEnergyAdvisor:
             snapshot,
         )
 
-        # Step 4: Build the analysis prompt.
+        # Step 4: Build analysis prompt.
         prompt = self.prompt_builder.build_analysis_prompt(
             user_question=question,
             tool_results=tool_results,
@@ -308,7 +390,7 @@ class SmartHomeEnergyAdvisor:
     # ---------------------------------------------------------
 
     def get_monthly_summary(self) -> str:
-        """Generates a proactive monthly energy summary."""
+        """Generates a monthly energy summary."""
 
         snapshot = self._get_snapshot()
 
@@ -429,10 +511,20 @@ class SmartHomeEnergyAdvisor:
 
         console.print(table)
 
-        console.print(
-            f"[bold]Potential monthly saving from smart scheduling:[/bold] "
-            f"[green]${audit['potential_monthly_saving']:.2f}[/green]\n"
+        potential_saving = audit.get(
+            "potential_monthly_saving"
         )
+
+        if potential_saving is not None:
+            console.print(
+                "[bold]Potential monthly saving from smart scheduling:[/bold] "
+                f"[green]${potential_saving:.2f}[/green]\n"
+            )
+        else:
+            console.print(
+                "[dim]Reliable appliance savings are not available "
+                "from the current data.[/dim]\n"
+            )
 
     def _print_help(self) -> None:
         console.print(
@@ -442,6 +534,7 @@ class SmartHomeEnergyAdvisor:
                 "  • What time should I run the washing machine to save money?\n"
                 "  • Which appliances are costing me the most?\n"
                 "  • What are my peak usage hours?\n"
+                "  • Why is consumption highest at 7 PM?\n"
                 "  • How can I reduce my energy consumption?\n"
                 "  • What is my carbon footprint this month?\n"
                 "  • Give me the current power draw of my home.\n"
@@ -523,7 +616,7 @@ class SmartHomeEnergyAdvisor:
                 self._print_top_consumers()
                 continue
 
-            # Normal question → agent loop.
+            # Normal question -> agent loop.
             console.print(
                 "\n[dim]🔍 Analysing your smart meter data...[/dim]\n"
             )
