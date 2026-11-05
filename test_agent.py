@@ -1,4 +1,4 @@
-"""
+﻿"""
 test_agent.py — Validation script (no pytest required)
 Runs all modules in demo mode and prints a pass/fail summary.
 """
@@ -25,7 +25,7 @@ from data.smart_meter import SmartMeterSimulator
 
 sim = check("SmartMeterSimulator init", lambda: SmartMeterSimulator())
 snap = check("get_snapshot()", lambda: sim.get_snapshot())
-check("history has 30 days", lambda: len(snap.daily_history) == 30 or True)
+check("history has 30 days", lambda: len(snap.daily_history) == 30)
 check("appliances list non-empty", lambda: len(snap.appliances) > 0)
 
 print("\n[2] Energy Analyzer Tools")
@@ -80,3 +80,5 @@ if errors:
 else:
     print(f"  RESULT: ALL CHECKS PASSED")
 print("=" * 55)
+
+
