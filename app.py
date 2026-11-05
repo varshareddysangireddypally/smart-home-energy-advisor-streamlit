@@ -21,7 +21,11 @@ from data.smart_meter import SmartMeterSimulator
 from tools.energy_analyzer import EnergyAnalyzer
 from agent.granite_client import GraniteClient
 from agent.prompt_builder import PromptBuilder
-from agent.advisor_agent import INTENT_TOOL_MAP, KEYWORD_INTENT_MAP
+from agent.advisor_agent import (
+    SmartHomeEnergyAdvisor,
+    INTENT_TOOL_MAP,
+    KEYWORD_INTENT_MAP,
+)
 
 
 # ── Page configuration ────────────────────────────────────────
@@ -242,7 +246,6 @@ tab_dash, tab_chat, tab_appliances, tab_schedule, tab_patterns, tab_carbon = st.
 
 with tab_dash:
 
-    # KPI row
     c1, c2, c3, c4, c5 = st.columns(5)
 
     pk_label = "🔴 Peak" if status["is_peak_hour"] else "🟢 Off-Peak"
@@ -257,7 +260,6 @@ with tab_dash:
 
     col_left, col_right = st.columns([3, 2])
 
-    # Daily usage bar chart
     with col_left:
 
         st.markdown(
@@ -302,7 +304,6 @@ with tab_dash:
 
         st.plotly_chart(fig_daily, use_container_width=True)
 
-    # Estimated appliance category usage chart
     with col_right:
 
         st.markdown(
@@ -342,7 +343,6 @@ with tab_dash:
             "not a measured smart-meter category breakdown."
         )
 
-    # Monthly summary metrics
     st.divider()
 
     st.markdown(
@@ -352,10 +352,7 @@ with tab_dash:
 
     m1, m2, m3, m4 = st.columns(4)
 
-    m1.metric(
-        "Avg Daily kWh",
-        f"{bill['avg_daily_kwh']}",
-    )
+    m1.metric("Avg Daily kWh", f"{bill['avg_daily_kwh']}")
 
     m2.metric(
         "Peak Cost Share",
@@ -414,7 +411,6 @@ with tab_chat:
 
     st.divider()
 
-    # Display conversation
     for msg in st.session_state.messages:
 
         with st.chat_message(
@@ -423,7 +419,6 @@ with tab_chat:
         ):
             st.markdown(msg["content"])
 
-    # Chat input
     with st.form("chat_form", clear_on_submit=True):
 
         user_input = st.text_input(
@@ -437,7 +432,6 @@ with tab_chat:
             use_container_width=True,
         )
 
-    # Resolve question
     question = None
 
     if submitted and user_input.strip():
@@ -448,7 +442,8 @@ with tab_chat:
 
     if question:
 
-        # Classify intent
+        # ── Classify intent ───────────────────────────────────
+
         q_lower = question.lower()
 
         intent = "GENERAL_ADVICE"
@@ -458,7 +453,8 @@ with tab_chat:
                 intent = detected_intent
                 break
 
-        # Tool mapping
+        # ── Get tool results from the existing dashboard data ─
+
         tool_fn_map = {
             "current_status": lambda: status,
             "monthly_bill_analysis": lambda: bill,
@@ -479,18 +475,66 @@ with tab_chat:
             if n in tool_fn_map
         ]
 
-        pb = get_prompt_builder()
+        # ── Deterministic response builders ───────────────────
 
-        prompt = pb.build_analysis_prompt(
-            user_question=question,
-            tool_results=tool_results,
-            conversation_history=st.session_state.history,
+        # Create an object without running __init__.
+        # The response-builder methods do not depend on instance state.
+        response_builder = object.__new__(SmartHomeEnergyAdvisor)
+
+        answer = None
+
+        # Identify bill-reduction questions separately from
+        # ordinary bill-analysis questions.
+        reduction_keywords = (
+            "reduce",
+            "lower",
+            "save",
+            "saving",
+            "cut",
+            "decrease",
         )
 
-        with st.spinner("🤖 IBM Granite is thinking…"):
-            answer = granite.generate(prompt)
+        is_bill_reduction_question = (
+            intent == "BILL_ANALYSIS"
+            and any(word in q_lower for word in reduction_keywords)
+        )
 
-        # Store conversation
+        with st.spinner("🤖 Preparing your energy analysis…"):
+
+            if is_bill_reduction_question:
+
+                answer = response_builder._build_bill_reduction_response(
+                    tool_results
+                )
+
+            elif intent == "APPLIANCE_SCHEDULE":
+
+                answer = response_builder._build_appliance_schedule_response(
+                    tool_results
+                )
+
+            elif intent == "APPLIANCE_AUDIT":
+
+                answer = response_builder._build_appliance_audit_response(
+                    tool_results
+                )
+
+            # ── Use IBM Granite for other questions ────────────
+
+            if answer is None:
+
+                pb = get_prompt_builder()
+
+                prompt = pb.build_analysis_prompt(
+                    user_question=question,
+                    tool_results=tool_results,
+                    conversation_history=st.session_state.history,
+                )
+
+                answer = granite.generate(prompt)
+
+        # ── Store conversation ───────────────────────────────
+
         st.session_state.messages.append({
             "role": "user",
             "content": question,
@@ -564,7 +608,6 @@ with tab_appliances:
 
     st.plotly_chart(fig_app, use_container_width=True)
 
-    # Appliance table
     st.markdown(
         '<div class="section-title">Full Appliance Breakdown</div>',
         unsafe_allow_html=True,
@@ -705,7 +748,6 @@ with tab_schedule:
 
         st.info("No shiftable appliances are available in this simulation.")
 
-    # Hourly rate chart
     st.markdown(
         '<div class="section-title">Hourly Electricity Rate ($/kWh) — Sample Tariff</div>',
         unsafe_allow_html=True,
@@ -744,7 +786,6 @@ with tab_schedule:
         use_container_width=True,
     )
 
-    # Theoretical savings metrics
     s1, s2 = st.columns(2)
 
     monthly_theoretical = schedule["total_monthly_saving_potential"]
@@ -796,15 +837,9 @@ with tab_patterns:
 
     p1, p2, p3, p4 = st.columns(4)
 
-    p1.metric(
-        "Avg Daily kWh",
-        f"{patterns['avg_daily_kwh']}",
-    )
+    p1.metric("Avg Daily kWh", f"{patterns['avg_daily_kwh']}")
 
-    p2.metric(
-        "Weekday Avg",
-        f"{patterns['weekday_avg_kwh']} kWh",
-    )
+    p2.metric("Weekday Avg", f"{patterns['weekday_avg_kwh']} kWh")
 
     p3.metric(
         "Weekend Avg",
@@ -812,14 +847,10 @@ with tab_patterns:
         delta=f"{patterns['weekend_premium_pct']:+.1f}% vs weekday",
     )
 
-    p4.metric(
-        "Anomaly Days",
-        patterns["total_anomaly_days"],
-    )
+    p4.metric("Anomaly Days", patterns["total_anomaly_days"])
 
     col_ph, col_an = st.columns([3, 2])
 
-    # Hourly profile chart
     with col_ph:
 
         st.markdown(
@@ -879,7 +910,6 @@ with tab_patterns:
 
             st.info("Hourly consumption data is not available.")
 
-    # Anomaly table
     with col_an:
 
         st.markdown(
@@ -911,7 +941,6 @@ with tab_patterns:
                 "No anomalies detected in the selected period."
             )
 
-    # Daily trend chart
     st.markdown(
         '<div class="section-title">Daily kWh Trend</div>',
         unsafe_allow_html=True,
@@ -965,15 +994,9 @@ with tab_carbon:
 
     cc1, cc2, cc3, cc4 = st.columns(4)
 
-    cc1.metric(
-        "Monthly kWh",
-        f"{carbon['monthly_kwh']}",
-    )
+    cc1.metric("Monthly kWh", f"{carbon['monthly_kwh']}")
 
-    cc2.metric(
-        "Monthly CO₂",
-        f"{carbon['monthly_kg_co2']} kg",
-    )
+    cc2.metric("Monthly CO₂", f"{carbon['monthly_kg_co2']} kg")
 
     cc3.metric(
         "Annual CO₂ (est.)",
@@ -991,7 +1014,6 @@ with tab_carbon:
         f"({carbon['note']})"
     )
 
-    # Monthly CO2 gauge
     fig_gauge = go.Figure(
         go.Indicator(
             mode="gauge+number+delta",
@@ -1032,7 +1054,6 @@ with tab_carbon:
         use_container_width=True,
     )
 
-    # Per-appliance CO2 breakdown
     st.markdown(
         '<div class="section-title">Estimated CO₂ by Appliance (monthly)</div>',
         unsafe_allow_html=True,
