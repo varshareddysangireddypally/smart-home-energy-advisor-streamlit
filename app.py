@@ -389,7 +389,7 @@ with tab_schedule:
     st.plotly_chart(fig_sched, use_container_width=True)
 
     # Hourly rate heatmap
-    st.markdown('<div class="section-title">Hourly Electricity Rate ($/kWh)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Hourly Electricity Rate ($/kWh) — Sample Tariff</div>', unsafe_allow_html=True)
     from tools.cost_calculator import CostCalculator
     cc = CostCalculator()
     hours = list(range(24))
@@ -409,9 +409,9 @@ with tab_schedule:
     st.plotly_chart(fig_rate, use_container_width=True)
 
     s1, s2 = st.columns(2)
-    s1.metric("Total Monthly Saving Potential", f"${schedule['total_monthly_saving_potential']:.2f}")
+    s1.metric("Estimated Monthly Saving Potential", f"${schedule['total_monthly_saving_potential']:.2f}")
     s2.metric("Annual Saving Potential", f"${schedule['total_monthly_saving_potential']*12:.2f}")
-
+    st.caption("Estimates assume eligible appliance usage can be shifted from peak to off-peak hours. Actual savings depend on usage patterns and your electricity tariff.")
     # Schedule table
     st.dataframe(df_sched[["appliance","daily_kwh","cost_if_peak","cost_if_offpeak","monthly_saving","recommended_window"]],
                  use_container_width=True, hide_index=True)

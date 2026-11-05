@@ -137,66 +137,69 @@ class GraniteClient:
         if "bill" in p and ("high" in p or "why" in p):
             return (
                 "Your bill is elevated this month primarily due to three factors:\n"
-                "1. **HVAC usage** — heating/cooling accounts for ~45% of your consumption.\n"
+              "1. **HVAC usage** — heating/cooling is a major contributor to energy consumption. Its exact percentage should be calculated from the current meter data.\n"
                 "2. **Evening peak-hour usage** — running heavy appliances between 5 PM–9 PM "
                 "triples your effective rate.\n"
-                "3. **EV charging** — detected during peak hours, adding ~$18 to your bill.\n\n"
+                "3. **EV charging** — review charging times and shift usage to off-peak hours when available.\n\n"
                 "Recommendation: shift EV charging and laundry to after 10 PM to save up to 30%."
             )
         if "washing machine" in p or "laundry" in p:
             return (
                 "The optimal time to run your washing machine is between **10 PM and 6 AM** "
                 "(off-peak hours) when the electricity rate drops to $0.084/kWh — "
-                "a saving of ~40% versus running it at 6 PM.\n"
+                "which may help reduce electricity costs compared with peak-hour usage.\n"
                 "If you need to run it during the day, **9 AM–12 PM** is the next best window."
             )
         if "dishwasher" in p:
             return (
                 "Run the dishwasher after **10 PM** on the delay-start setting. "
                 "At off-peak rates you save roughly $0.22 per cycle versus running it at dinner time. "
-                "Over a month that adds up to ~$6.60."
+                "Regular off-peak scheduling may help reduce electricity costs over time."
             )
         if "solar" in p or "renewable" in p:
             return (
-                "Based on your 1,800 sq ft home and average consumption of 32 kWh/day, "
-                "a 6 kW solar system would offset ~70% of your usage. "
-                "Estimated payback period: 6–8 years with current utility rates."
+                "Solar suitability depends on your home's actual daily electricity consumption, "
+                "available rooftop space, sunlight exposure, and local electricity rates. "
+                "A solar assessment using these details can estimate the suitable system size "
+                "and potential savings."
             )
         if "hvac" in p or "heating" in p or "cooling" in p or "thermostat" in p:
             return (
-                "Your HVAC is your largest energy consumer (~12 kWh/day). "
+                "Your HVAC system is an important contributor to household energy use. "
                 "Recommendations:\n"
-                "• Set thermostat to 78°F (cooling) or 68°F (heating) — each degree saves ~3%.\n"
-                "• Enable schedule mode: reduce conditioning 30 min before leaving home.\n"
-                "• Check/replace air filters monthly — dirty filters raise consumption by 15%."
+                "• Use a suitable thermostat setting for your comfort and climate.\n"
+                "• Enable schedule mode to reduce heating or cooling when nobody is home.\n"
+                "• Check and clean or replace air filters regularly to help maintain HVAC efficiency."
             )
         if "save" in p or "tip" in p or "recommend" in p or "advice" in p:
             return (
                 "Top 5 energy-saving recommendations for your home:\n"
-                "1. **Shift peak-hour loads** — move laundry, dishwasher, EV charging to 10 PM–6 AM.\n"
-                "2. **Smart thermostat schedule** — potential saving: $22/month.\n"
-                "3. **Unplug idle devices** — vampire loads cost ~$8/month.\n"
-                "4. **LED upgrades** — if not already done, saves ~$10/month.\n"
-                "5. **Pool pump schedule** — run 6 hours during off-peak only."
+                "1. **Shift peak-hour loads** — run laundry, dishwasher, and EV charging during off-peak hours when available.\n"
+                "2. **Use a smart thermostat schedule** — adjust heating and cooling when nobody is home.\n"
+                "3. **Unplug idle devices** — reduce unnecessary standby power consumption.\n"
+                "4. **Use LED lighting** — replace traditional bulbs with energy-efficient LEDs.\n"
+                "5. **Schedule pool pump operation** — use efficient operating hours based on your needs and electricity tariff."
             )
         if "ev" in p or "electric vehicle" in p or "car" in p or "charger" in p:
             return (
-                "Your EV charger (7.2 kW) is your second largest load at ~10 kWh/day. "
-                "Charging at off-peak rates (10 PM–6 AM) saves approximately $0.78 per full charge "
-                "versus peak-hour charging. Monthly saving: up to $23."
+                "To reduce EV charging costs, schedule charging during off-peak hours "
+                "if your electricity tariff supports them. "
+                "Use your vehicle's scheduled charging feature where available. "
+                "Actual savings depend on battery capacity, charging requirements, "
+                "and the difference between peak and off-peak electricity rates."
             )
         if "pattern" in p or "usage" in p or "consumption" in p or "analys" in p:
             return (
                 "Usage pattern analysis:\n"
-                "• **Peak load window**: 5 PM–9 PM (avg 2.8 kWh/hr) — highest cost period.\n"
-                "• **Overnight baseline**: 0.4 kWh/hr — normal for a household your size.\n"
-                "• **Weekend vs weekday**: weekends 12% higher — consistent with home occupancy.\n"
-                "• **Month-over-month**: consumption up 8% — likely driven by seasonal HVAC demand."
+                "• Review peak-hour consumption to identify opportunities to shift flexible appliance usage.\n"
+                "• Monitor overnight electricity usage to identify unnecessary standby consumption.\n"
+                "• Compare weekend and weekday consumption to understand changes in household usage.\n"
+                "• Compare monthly consumption with previous months to identify increases or decreases."
             )
         # Generic fallback
         return (
             "I've analysed your smart meter data. Your home currently draws "
-            f"{round(1200 + 800 * 0.5, 0):.0f} W. "
+            "based on the available smart meter readings. "
             "The biggest opportunity to reduce your bill is shifting flexible loads "
             "(laundry, dishwasher, EV charging) to off-peak hours (10 PM–6 AM). "
             "Would you like a detailed breakdown of any specific appliance or time period?"
